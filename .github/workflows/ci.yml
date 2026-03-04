@@ -31,7 +31,7 @@ jobs:
           node-version: 22
           cache: pnpm
           cache-dependency-path: |
-            frontend/pnpm-lock.yaml
+            pnpm-lock.yaml
 
       - name: pnpm-only policy
         run: scripts/check_no_npm.sh
