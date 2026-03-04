@@ -1,4 +1,9 @@
-use xenochat_api::{ApiService, Route};
+use std::path::PathBuf;
+
+use xenochat_api::{
+    ApiService, Route,
+    server::{build_router, serve},
+};
 use xenochat_common::{config::XenochatConfig, version::VERSION};
 use xenochat_core::{
     Collaborator, CompletionRequest, KeywordTrigger, ModelProvider, Tool, ToolCall, ToolOutcome,
@@ -50,13 +55,61 @@ impl Tool for HealthTool {
     }
 }
 
-fn main() {
-    let config = XenochatConfig::default();
+#[tokio::main]
+async fn main() {
+    let config = load_runtime_config();
     if let Err(error) = config.validate() {
         eprintln!("configuration validation failed: {error:?}");
         std::process::exit(1);
     }
 
+    let command = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "preview".to_owned());
+
+    match command.as_str() {
+        "serve" => {
+            let _router = build_router(config.clone());
+            println!(
+                "starting xenochat api at {}:{}",
+                config.api.host, config.api.port
+            );
+            if let Err(error) = serve(config).await {
+                eprintln!("api server failed: {error}");
+                std::process::exit(1);
+            }
+        }
+        "preview" => {
+            run_preview(config);
+        }
+        other => {
+            eprintln!("unknown command: {other}");
+            eprintln!("usage: xenochat [preview|serve]");
+            std::process::exit(2);
+        }
+    }
+}
+
+fn load_runtime_config() -> XenochatConfig {
+    if let Ok(path) = std::env::var("XENOCHAT_CONFIG") {
+        let parsed = XenochatConfig::from_toml_file(&PathBuf::from(path));
+        if let Ok(config) = parsed {
+            return config;
+        }
+    }
+
+    let default_path = PathBuf::from("configs/xenochat.toml");
+    if default_path.exists() {
+        let parsed = XenochatConfig::from_toml_file(&default_path);
+        if let Ok(config) = parsed {
+            return config;
+        }
+    }
+
+    XenochatConfig::default()
+}
+
+fn run_preview(config: XenochatConfig) {
     let mut api = ApiService::new(config.clone());
     api.register_adapter(TelegramAdapter::default());
     api.register_adapter(DiscordAdapter::default());

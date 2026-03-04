@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+pub mod server;
+
 use xenochat_adapter::PlatformAdapter;
 use xenochat_common::config::XenochatConfig;
 use xenochat_core::Message;

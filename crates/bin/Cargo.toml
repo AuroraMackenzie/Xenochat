@@ -31,6 +31,7 @@ xenochat-viber = { path = "../viber" }
 xenochat-wechat = { path = "../wechat" }
 xenochat-whatsapp = { path = "../whatsapp" }
 xenochat-zoom = { path = "../zoom" }
+tokio = { version = "1.48.0", features = ["macros", "rt-multi-thread"] }
 
 [lints]
 workspace = true

@@ -6,7 +6,8 @@ MIRROR_DIR="/Users/ycy/Desktop/open-resources-programs/GitHub/Myself/Xenochat"
 
 mkdir -p "$MIRROR_DIR"
 rsync -a --delete \
-  --exclude '.git' \
+  --filter='P .git/' \
+  --exclude '.git/' \
   --exclude 'target' \
   --exclude '.Xenochat' \
   --exclude 'node_modules' \
