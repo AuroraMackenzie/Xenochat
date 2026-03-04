@@ -8,6 +8,7 @@ pub struct ApiSettings {
     pub port: u16,
     pub allowed_origins: Vec<String>,
     pub api_keys: Vec<String>,
+    pub admin_api_keys: Vec<String>,
 }
 
 impl Default for ApiSettings {
@@ -17,6 +18,7 @@ impl Default for ApiSettings {
             port: 9800,
             allowed_origins: Vec::new(),
             api_keys: Vec::new(),
+            admin_api_keys: Vec::new(),
         }
     }
 }
@@ -79,7 +81,7 @@ impl XenochatConfig {
         }
 
         let is_local = self.api.host == "127.0.0.1" || self.api.host == "::1";
-        if !is_local && self.api.api_keys.is_empty() {
+        if !is_local && self.all_api_key_entries().all(|entry| entry.is_empty()) {
             return Err(ConfigValidationError::PublicBindingWithoutAuth);
         }
 
@@ -88,9 +90,7 @@ impl XenochatConfig {
         }
 
         if self
-            .api
-            .api_keys
-            .iter()
+            .all_api_key_entries()
             .any(|entry| !entry.is_empty() && !is_encrypted_secret(entry))
         {
             return Err(ConfigValidationError::PlaintextApiKeyDetected);
@@ -100,9 +100,7 @@ impl XenochatConfig {
     }
 
     pub fn has_encrypted_api_keys(&self) -> bool {
-        self.api
-            .api_keys
-            .iter()
+        self.all_api_key_entries()
             .any(|entry| !entry.is_empty() && is_encrypted_secret(entry))
     }
 
@@ -110,26 +108,21 @@ impl XenochatConfig {
         &self,
         master_key: Option<&str>,
     ) -> Result<Vec<String>, ConfigSecretError> {
-        let mut resolved = Vec::new();
+        resolve_key_entries(&self.api.api_keys, master_key)
+    }
 
-        for key in &self.api.api_keys {
-            if key.is_empty() {
-                continue;
-            }
+    pub fn resolve_admin_api_keys(
+        &self,
+        master_key: Option<&str>,
+    ) -> Result<Vec<String>, ConfigSecretError> {
+        resolve_key_entries(&self.api.admin_api_keys, master_key)
+    }
 
-            if is_encrypted_secret(key) {
-                let Some(master) = master_key else {
-                    return Err(ConfigSecretError::MissingMasterKey);
-                };
-
-                let opened = open_secret(key, master).map_err(ConfigSecretError::DecryptFailure)?;
-                resolved.push(opened);
-            } else {
-                resolved.push(key.clone());
-            }
-        }
-
-        Ok(resolved)
+    fn all_api_key_entries(&self) -> impl Iterator<Item = &String> {
+        self.api
+            .api_keys
+            .iter()
+            .chain(self.api.admin_api_keys.iter())
     }
 
     pub fn from_toml_file(path: &Path) -> Result<Self, String> {
@@ -170,6 +163,9 @@ impl XenochatConfig {
                 "api.api_keys" => {
                     config.api.api_keys = parse_csv_value(value);
                 }
+                "api.admin_api_keys" => {
+                    config.api.admin_api_keys = parse_csv_value(value);
+                }
                 "queue.capacity" => {
                     if let Ok(capacity) = value.parse::<usize>() {
                         config.queue.capacity = capacity;
@@ -190,6 +186,32 @@ impl XenochatConfig {
 
         Ok(config)
     }
+}
+
+fn resolve_key_entries(
+    entries: &[String],
+    master_key: Option<&str>,
+) -> Result<Vec<String>, ConfigSecretError> {
+    let mut resolved = Vec::new();
+
+    for key in entries {
+        if key.is_empty() {
+            continue;
+        }
+
+        if is_encrypted_secret(key) {
+            let Some(master) = master_key else {
+                return Err(ConfigSecretError::MissingMasterKey);
+            };
+
+            let opened = open_secret(key, master).map_err(ConfigSecretError::DecryptFailure)?;
+            resolved.push(opened);
+        } else {
+            resolved.push(key.clone());
+        }
+    }
+
+    Ok(resolved)
 }
 
 fn parse_csv_value(value: &str) -> Vec<String> {
@@ -235,11 +257,19 @@ mod tests {
     }
 
     #[test]
+    fn rejects_plaintext_admin_api_keys() {
+        let mut config = XenochatConfig::default();
+        config.api.admin_api_keys = vec!["plain-admin-key".to_owned()];
+        let result = config.validate();
+        assert_eq!(result, Err(ConfigValidationError::PlaintextApiKeyDetected));
+    }
+
+    #[test]
     fn loads_api_lists_from_toml() {
         let mut tempfile = tempfile::NamedTempFile::new().expect("temp file");
         writeln!(
             tempfile,
-            "api.allowed_origins = https://console.local,https://admin.local\napi.api_keys = enc:v1:test,enc:v1:test2"
+            "api.allowed_origins = https://console.local,https://admin.local\napi.api_keys = enc:v1:test,enc:v1:test2\napi.admin_api_keys = enc:v1:admin"
         )
         .expect("write");
 
@@ -247,6 +277,7 @@ mod tests {
 
         assert_eq!(config.api.allowed_origins.len(), 2);
         assert_eq!(config.api.api_keys.len(), 2);
+        assert_eq!(config.api.admin_api_keys.len(), 1);
     }
 
     #[test]
@@ -267,5 +298,16 @@ mod tests {
         config.api.api_keys = vec![sealed];
         let result = config.resolve_api_keys(None);
         assert_eq!(result, Err(ConfigSecretError::MissingMasterKey));
+    }
+
+    #[test]
+    fn resolves_encrypted_admin_api_keys() {
+        let sealed = seal_secret("real-admin-key", "master-secret").expect("seal");
+        let mut config = XenochatConfig::default();
+        config.api.admin_api_keys = vec![sealed];
+        let resolved = config
+            .resolve_admin_api_keys(Some("master-secret"))
+            .expect("resolve keys");
+        assert_eq!(resolved, vec!["real-admin-key".to_owned()]);
     }
 }

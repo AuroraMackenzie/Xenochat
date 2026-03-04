@@ -27,6 +27,7 @@ const RATE_LIMIT_MAX: usize = 120;
 pub struct ApiRuntime {
     config: XenochatConfig,
     resolved_api_keys: Arc<Vec<String>>,
+    resolved_admin_api_keys: Arc<Vec<String>>,
     service: Arc<Mutex<ApiService>>,
     limiter: Arc<Mutex<HashMap<String, VecDeque<Instant>>>>,
 }
@@ -36,10 +37,14 @@ impl ApiRuntime {
         let resolved_api_keys = config
             .resolve_api_keys(master_key)
             .map_err(|error| format!("failed to resolve encrypted api keys: {error:?}"))?;
+        let resolved_admin_api_keys = config
+            .resolve_admin_api_keys(master_key)
+            .map_err(|error| format!("failed to resolve encrypted admin api keys: {error:?}"))?;
         let service = ApiService::new(config.clone());
         Ok(Self {
             config,
             resolved_api_keys: Arc::new(resolved_api_keys),
+            resolved_admin_api_keys: Arc::new(resolved_admin_api_keys),
             service: Arc::new(Mutex::new(service)),
             limiter: Arc::new(Mutex::new(HashMap::new())),
         })
@@ -59,6 +64,10 @@ impl ApiRuntime {
 
     fn resolved_api_keys(&self) -> &[String] {
         self.resolved_api_keys.as_ref()
+    }
+
+    fn resolved_admin_api_keys(&self) -> &[String] {
+        self.resolved_admin_api_keys.as_ref()
     }
 }
 
@@ -96,6 +105,14 @@ struct PluginsResponse {
     plugins: Vec<String>,
 }
 
+#[derive(Debug, Serialize)]
+struct AdminSecurityResponse {
+    admin_keys_configured: bool,
+    standard_keys_configured: bool,
+    allowed_origins: usize,
+    rate_limit_per_minute: usize,
+}
+
 pub fn build_router(config: XenochatConfig) -> Result<Router, String> {
     let resolved = resolve_master_key().map_err(|error| {
         format!("failed to resolve master key from environment/keychain: {error:?}")
@@ -115,6 +132,7 @@ pub fn build_router_with_master(
         .route("/api/v1/config", get(config_snapshot))
         .route("/api/v1/logs", get(logs))
         .route("/api/v1/plugins", get(plugins))
+        .route("/api/v1/admin/security", get(admin_security))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             reject_query_token,
@@ -122,6 +140,10 @@ pub fn build_router_with_master(
         .layer(middleware::from_fn_with_state(
             state.clone(),
             enforce_rate_limit,
+        ))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            enforce_admin_auth,
         ))
         .layer(middleware::from_fn_with_state(state.clone(), enforce_auth))
         .layer(middleware::from_fn_with_state(state.clone(), enforce_cors))
@@ -185,7 +207,8 @@ async fn config_snapshot(State(state): State<ApiRuntime>) -> impl IntoResponse {
             host: config.api.host.clone(),
             port: config.api.port,
             allowed_origins: config.api.allowed_origins.len(),
-            api_keys_configured: !config.api.api_keys.is_empty(),
+            api_keys_configured: !(config.api.api_keys.is_empty()
+                && config.api.admin_api_keys.is_empty()),
         }),
     )
 }
@@ -208,6 +231,21 @@ async fn plugins(State(state): State<ApiRuntime>) -> impl IntoResponse {
         StatusCode::OK,
         Json(PluginsResponse {
             plugins: vec!["core-safe-mode".to_owned()],
+        }),
+    )
+}
+
+async fn admin_security(State(state): State<ApiRuntime>) -> impl IntoResponse {
+    state.with_service_mut(|service| service.handle_route(Route::Config));
+
+    let config = state.config();
+    (
+        StatusCode::OK,
+        Json(AdminSecurityResponse {
+            admin_keys_configured: !state.resolved_admin_api_keys().is_empty(),
+            standard_keys_configured: !state.resolved_api_keys().is_empty(),
+            allowed_origins: config.api.allowed_origins.len(),
+            rate_limit_per_minute: RATE_LIMIT_MAX,
         }),
     )
 }
@@ -274,23 +312,51 @@ async fn enforce_auth(
         return next.run(request).await;
     }
 
-    let keys = state.resolved_api_keys();
-    if keys.is_empty() {
+    let standard_keys = state.resolved_api_keys();
+    let admin_keys = state.resolved_admin_api_keys();
+    if standard_keys.is_empty() && admin_keys.is_empty() {
         return next.run(request).await;
     }
 
-    let bearer = request
-        .headers()
-        .get("authorization")
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.strip_prefix("Bearer "));
-
-    let Some(token) = bearer else {
+    let Some(token) = extract_bearer_token(request.headers()) else {
         return (StatusCode::UNAUTHORIZED, "missing bearer token").into_response();
     };
 
-    if !keys.iter().any(|key| key == token) {
+    let valid =
+        standard_keys.iter().any(|key| key == token) || admin_keys.iter().any(|key| key == token);
+
+    if !valid {
         return (StatusCode::UNAUTHORIZED, "invalid bearer token").into_response();
+    }
+
+    next.run(request).await
+}
+
+async fn enforce_admin_auth(
+    State(state): State<ApiRuntime>,
+    request: Request<Body>,
+    next: Next,
+) -> Response {
+    if !request.uri().path().starts_with("/api/v1/admin/") {
+        return next.run(request).await;
+    }
+
+    let admin_keys = state.resolved_admin_api_keys();
+    let standard_keys = state.resolved_api_keys();
+
+    if admin_keys.is_empty() {
+        if standard_keys.is_empty() {
+            return next.run(request).await;
+        }
+        return (StatusCode::FORBIDDEN, "admin api keys are not configured").into_response();
+    }
+
+    let Some(token) = extract_bearer_token(request.headers()) else {
+        return (StatusCode::UNAUTHORIZED, "missing bearer token").into_response();
+    };
+
+    if !admin_keys.iter().any(|key| key == token) {
+        return (StatusCode::UNAUTHORIZED, "invalid admin bearer token").into_response();
     }
 
     next.run(request).await
@@ -354,6 +420,13 @@ fn apply_cors_headers(headers: &mut HeaderMap, origin: &str) {
     );
 }
 
+fn extract_bearer_token(headers: &HeaderMap) -> Option<&str> {
+    headers
+        .get("authorization")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))
+}
+
 fn client_key(headers: &HeaderMap, socket_addr: Option<SocketAddr>) -> String {
     if let Some(forwarded) = headers
         .get("x-forwarded-for")
@@ -388,6 +461,18 @@ mod tests {
             xenochat_common::crypto::seal_secret("secret-key", "unit-test-master").expect("seal");
         let mut config = XenochatConfig::default();
         config.api.api_keys = vec![sealed];
+        config.api.allowed_origins = vec!["https://console.xenochat.local".to_owned()];
+        config
+    }
+
+    fn rbac_config() -> XenochatConfig {
+        let sealed_standard =
+            xenochat_common::crypto::seal_secret("secret-key", "unit-test-master").expect("seal");
+        let sealed_admin =
+            xenochat_common::crypto::seal_secret("admin-key", "unit-test-master").expect("seal");
+        let mut config = XenochatConfig::default();
+        config.api.api_keys = vec![sealed_standard];
+        config.api.admin_api_keys = vec![sealed_admin];
         config.api.allowed_origins = vec!["https://console.xenochat.local".to_owned()];
         config
     }
@@ -490,5 +575,68 @@ mod tests {
             .expect("response");
 
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn rejects_non_admin_token_on_admin_route() {
+        let app = build_router_with_master(rbac_config(), Some("unit-test-master".to_owned()))
+            .expect("router");
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/admin/security")
+                    .method(Method::GET)
+                    .header("origin", "https://console.xenochat.local")
+                    .header("authorization", "Bearer secret-key")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn accepts_admin_token_on_admin_route() {
+        let app = build_router_with_master(rbac_config(), Some("unit-test-master".to_owned()))
+            .expect("router");
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/admin/security")
+                    .method(Method::GET)
+                    .header("origin", "https://console.xenochat.local")
+                    .header("authorization", "Bearer admin-key")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn rejects_admin_route_when_admin_keys_not_configured() {
+        let app = build_router_with_master(secured_config(), Some("unit-test-master".to_owned()))
+            .expect("router");
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/admin/security")
+                    .method(Method::GET)
+                    .header("origin", "https://console.xenochat.local")
+                    .header("authorization", "Bearer secret-key")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 }

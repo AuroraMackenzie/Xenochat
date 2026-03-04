@@ -138,12 +138,16 @@ h1 {
   color: var(--muted);
 }
 
-.panel:nth-child(2) {
+.panel-platforms {
   grid-column: span 8;
 }
 
+.panel-access {
+  grid-column: span 6;
+}
+
 .panel-wide {
-  grid-column: span 12;
+  grid-column: span 6;
 }
 
 .panel-head {
@@ -231,6 +235,39 @@ h1 {
   line-height: 1.5;
 }
 
+.access-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.access-list li {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.65rem 0.72rem;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.access-list p {
+  margin: 0.22rem 0 0;
+  color: var(--muted);
+  line-height: 1.36;
+  font-size: 0.9rem;
+}
+
+.credential-tag {
+  justify-self: start;
+  border-radius: 999px;
+  border: 1px solid rgba(69, 196, 160, 0.5);
+  color: #c9f9e8;
+  padding: 0.18rem 0.52rem;
+  font-size: 0.75rem;
+}
+
 @keyframes reveal {
   from {
     transform: translateY(12px);
@@ -256,7 +293,8 @@ h1 {
 
 @media (max-width: 900px) {
   .panel-spotlight,
-  .panel:nth-child(2),
+  .panel-platforms,
+  .panel-access,
   .panel-wide {
     grid-column: span 12;
   }

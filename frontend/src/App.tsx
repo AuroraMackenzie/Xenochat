@@ -6,6 +6,12 @@ type PlatformStatus = {
   state: "ready" | "planned";
 };
 
+type AccessTier = {
+  role: "Viewer" | "Operator" | "Admin";
+  scope: string;
+  credential: string;
+};
+
 const platformStatus: PlatformStatus[] = [
   { name: "Telegram", mode: "L3", state: "ready" },
   { name: "Discord", mode: "L3", state: "ready" },
@@ -24,6 +30,24 @@ const platformStatus: PlatformStatus[] = [
   { name: "iMessage", mode: "L1", state: "planned" },
   { name: "Instagram", mode: "L1", state: "planned" },
   { name: "KakaoTalk", mode: "L1", state: "planned" },
+];
+
+const accessTiers: AccessTier[] = [
+  {
+    role: "Viewer",
+    scope: "Health and runtime overview endpoints",
+    credential: "No bearer required for /health",
+  },
+  {
+    role: "Operator",
+    scope: "Standard API routes under /api/v1/*",
+    credential: "api.api_keys bearer set",
+  },
+  {
+    role: "Admin",
+    scope: "Restricted routes under /api/v1/admin/*",
+    credential: "api.admin_api_keys bearer set",
+  },
 ];
 
 export function App() {
@@ -74,12 +98,16 @@ export function App() {
             <strong>127.0.0.1, strict CORS</strong>
           </div>
           <div className="stat-row">
+            <span>Access Control</span>
+            <strong>Split operator/admin bearer keys</strong>
+          </div>
+          <div className="stat-row">
             <span>Package Manager</span>
             <strong>pnpm only</strong>
           </div>
         </section>
 
-        <section className="panel">
+        <section className="panel panel-platforms">
           <div className="panel-head">
             <h2>Platform Coverage</h2>
             <span className="badge">{readyCount} ready</span>
@@ -103,6 +131,21 @@ export function App() {
                     {platform.state}
                   </span>
                 </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section className="panel panel-access">
+          <h2>Access Tiers</h2>
+          <ul className="access-list">
+            {accessTiers.map((tier) => (
+              <li key={tier.role}>
+                <div>
+                  <strong>{tier.role}</strong>
+                  <p>{tier.scope}</p>
+                </div>
+                <span className="credential-tag">{tier.credential}</span>
               </li>
             ))}
           </ul>

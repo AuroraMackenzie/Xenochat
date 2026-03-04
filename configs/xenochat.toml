@@ -9,6 +9,8 @@ api.allowed_origins = "https://xenochat.local"
 # Or store a master key in macOS Keychain service xenochat.master-key.
 # Then place the returned value below.
 api.api_keys = ""
+# Optional admin-only keys for /api/v1/admin/* routes (same encrypted format).
+api.admin_api_keys = ""
 
 queue.capacity = 4096
 queue.drop_when_full = false

@@ -46,4 +46,4 @@
 - Priority order: P0 first (auth/logs/network/CORS/query-token/queue/config), then P1 (type safety, file size, dependency and test governance), then P2 (resilience and operational maturity).
 
 ## Current implementation note
-This repository currently delivers a strong Rust baseline and shared adapter contract, plus an implemented security baseline for encrypted keys, optional macOS Keychain master key fallback, strict API auth/CORS, STRIDE threat modeling, and automated vulnerability scans. Full production parity for all REQ/ADV/FIX items is tracked in `TODOWRITE_STATUS.md` and will be expanded in iterative blocks.
+This repository currently delivers a strong Rust baseline and shared adapter contract, plus an implemented security baseline for encrypted keys, optional macOS Keychain master key fallback, split standard/admin API key RBAC gate, strict API auth/CORS, STRIDE threat modeling, and automated vulnerability scans. Full production parity for all REQ/ADV/FIX items is tracked in `TODOWRITE_STATUS.md` and will be expanded in iterative blocks.

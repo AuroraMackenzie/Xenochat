@@ -25,6 +25,7 @@ This document defines the production threat model baseline for Xenochat and maps
 - Threat: unauthenticated client calls protected API routes.
 - Controls:
   - Bearer token enforcement on non-health routes.
+  - Separate admin bearer key gate for `/api/v1/admin/*` routes.
   - Query-token rejection to prevent URL token leakage.
   - Public bind without auth keys is rejected at config validation.
 
@@ -66,9 +67,8 @@ This document defines the production threat model baseline for Xenochat and maps
 
 ## Residual Risks and Next Actions
 - No hardware-backed secret storage yet for all platforms.
-- No full RBAC layer in API routes yet.
+- Current RBAC is route-level (standard vs admin keys) and does not yet include user/group policy graph.
 - No distributed rate-limit backend for multi-instance deployment.
 - Next milestones:
-  - Add optional macOS Keychain integration for master key retrieval.
-  - Add role-based route scopes and session management.
+  - Add role-based route scopes with user identities and session management.
   - Add per-route adaptive throttling with persistent counters.

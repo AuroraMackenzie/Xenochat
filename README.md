@@ -34,11 +34,12 @@ Xenochat is a Rust-first multi-platform AI bot framework designed for high safet
 ## Security baseline
 - API host default: `127.0.0.1`
 - CORS default: deny all origins
-- Public bind requires non-empty encrypted `api_keys`
+- Public bind requires non-empty encrypted `api_keys` or `admin_api_keys`
 - Queue model: bounded queue with optional drop policy
 - Logs: secret redaction helpers in `crates/common/src/security.rs`
 - Query-token auth is rejected (`token`/`access_token` in URL).
 - Protected routes require `Authorization: Bearer <token>`.
+- Admin routes (`/api/v1/admin/*`) require `api.admin_api_keys` bearer tokens.
 - Encrypted API keys use `enc:v1:<nonce>:<ciphertext>` and are decrypted by `XENOCHAT_MASTER_KEY`.
 - If `XENOCHAT_MASTER_KEY` is missing on macOS, runtime can fall back to Keychain lookup (`xenochat.master-key` service by default).
 - Startup prints an explicit warning when API bind host is non-local.

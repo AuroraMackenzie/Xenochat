@@ -7,10 +7,11 @@ This checklist is the release gate for Xenochat runtime security.
 - Wildcard CORS (`*`) is forbidden.
 - Query-token authentication is forbidden.
 - Bearer token is required when API keys are configured.
+- Admin routes require dedicated admin bearer keys.
 - Queue capacity must be non-zero.
 
 ## Secret Management
-- API keys in config must use encrypted format: `enc:v1:<nonce>:<ciphertext>`.
+- `api.api_keys` and `api.admin_api_keys` must use encrypted format: `enc:v1:<nonce>:<ciphertext>`.
 - Plaintext API keys are rejected at startup.
 - Master key must be resolvable from `XENOCHAT_MASTER_KEY` or macOS Keychain fallback.
 - Logs must pass redaction tests for token-like data.

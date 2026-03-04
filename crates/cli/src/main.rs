@@ -69,6 +69,10 @@ fn run_check_config(path: PathBuf) {
                         eprintln!("configuration secret resolution failed: {error:?}");
                         std::process::exit(1);
                     }
+                    if let Err(error) = config.resolve_admin_api_keys(master_ref) {
+                        eprintln!("configuration admin secret resolution failed: {error:?}");
+                        std::process::exit(1);
+                    }
                     if let Some(item) = master {
                         print_master_key_source(item.source);
                     }
