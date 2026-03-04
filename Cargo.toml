@@ -1,0 +1,39 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/common",
+  "crates/core",
+  "crates/protocol",
+  "crates/adapter",
+  "crates/telegram",
+  "crates/discord",
+  "crates/googlechat",
+  "crates/imessage",
+  "crates/instagram",
+  "crates/kakaotalk",
+  "crates/line",
+  "crates/messenger",
+  "crates/qq",
+  "crates/signal",
+  "crates/skype",
+  "crates/slack",
+  "crates/teams",
+  "crates/viber",
+  "crates/wechat",
+  "crates/whatsapp",
+  "crates/zoom",
+  "crates/api",
+  "crates/cli",
+  "crates/gpu",
+  "crates/bin"
+]
+default-members = ["crates/bin"]
+
+[workspace.package]
+edition = "2024"
+license = "AGPL-3.0-only"
+repository = "https://github.com/AuroraMackenzie/Xenochat"
+version = "0.1.0"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"

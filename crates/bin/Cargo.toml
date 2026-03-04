@@ -1,0 +1,36 @@
+[package]
+name = "xenochat-bin"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "xenochat"
+path = "src/main.rs"
+
+[dependencies]
+xenochat-api = { path = "../api" }
+xenochat-common = { path = "../common" }
+xenochat-core = { path = "../core" }
+xenochat-gpu = { path = "../gpu" }
+xenochat-discord = { path = "../discord" }
+xenochat-googlechat = { path = "../googlechat" }
+xenochat-imessage = { path = "../imessage" }
+xenochat-instagram = { path = "../instagram" }
+xenochat-kakaotalk = { path = "../kakaotalk" }
+xenochat-line = { path = "../line" }
+xenochat-messenger = { path = "../messenger" }
+xenochat-qq = { path = "../qq" }
+xenochat-signal = { path = "../signal" }
+xenochat-skype = { path = "../skype" }
+xenochat-slack = { path = "../slack" }
+xenochat-teams = { path = "../teams" }
+xenochat-telegram = { path = "../telegram" }
+xenochat-viber = { path = "../viber" }
+xenochat-wechat = { path = "../wechat" }
+xenochat-whatsapp = { path = "../whatsapp" }
+xenochat-zoom = { path = "../zoom" }
+
+[lints]
+workspace = true

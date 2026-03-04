@@ -1,0 +1,15 @@
+[package]
+name = "xenochat-common"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dev-dependencies]
+tempfile = "3.15.0"
+
+[lints]
+workspace = true

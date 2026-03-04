@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  rust-and-frontend:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.27.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: |
+            frontend/pnpm-lock.yaml
+
+      - name: pnpm-only policy
+        run: scripts/check_no_npm.sh
+
+      - name: TODO policy
+        run: scripts/check_todo_policy.sh
+
+      - name: Rust format check
+        run: cargo fmt --all -- --check
+
+      - name: Rust clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Rust tests
+        run: cargo test --workspace
+
+      - name: Frontend install
+        run: pnpm --dir frontend install --frozen-lockfile
+
+      - name: Frontend typecheck
+        run: pnpm --dir frontend lint
+
+      - name: Frontend build
+        run: pnpm --dir frontend build
+
+      - name: Originality hash audit
+        run: scripts/originality_audit.py

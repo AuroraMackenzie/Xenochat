@@ -1,0 +1,11 @@
+# Xenochat baseline runtime configuration
+api.host = "127.0.0.1"
+api.port = 9800
+api.allowed_origins = "https://xenochat.local"
+api.api_keys = "replace-me-with-strong-key"
+
+queue.capacity = 4096
+queue.drop_when_full = false
+
+gpu.prefer_metal = true
+gpu.allow_cpu_fallback = true

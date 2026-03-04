@@ -1,0 +1,537 @@
+# Xenochat 项目最终极致完美整合计划
+
+本计划整合了原 MaiBot 生态五份深度分析报告、用户自拟七十条要点、前期详细开发路线以及多次评审意见，形成一份完整、可审计、可执行的终极方案。它完整继承了原生态所有优点，彻底清除了所有已知缺陷，并引入原创性保障、生产级安全、Metal GPU 加速及全球 17 社交平台分级覆盖，确保项目达到“极致完美”标准。
+
+---
+
+## 1. 项目总目标与核心红线
+
+### 1.1 总目标
+构建一个**后端核心基于 Rust、前端完全重写**的模块化、高性能、跨平台的智能聊天机器人框架 **Xenochat**，实现：
+- **后端核心 Rust-first**：协议层、智能体核心、适配器全部使用 Rust 实现，确保内存安全与极致性能。
+- **前端原创重写**：管理面板采用 React + TypeScript，但所有代码、界面、素材完全重新撰写，与参考项目无任何直接复制。
+- **继承并超越原生态**：保留 MaiBot 所有拟人化、多模型协作、插件化等优点，消除所有安全、质量、文档缺陷。
+- **全球社交平台完全覆盖**：支持 discord, googlechat, imessage, instagram, kakaotalk, line, messenger, QQ(qq), signal, skype, slack, teams, telegram, viber, wechat(微信), whatsapp, zoom 平台的全功能机器人
+- **Apple Silicon 原生加速**：利用 Metal 框架和 MPS 后端实现 GPU 加速推理。
+- **100% 原创**：代码、界面、素材、注释全部重新撰写，通过三层原创审计。
+
+### 1.2 核心红线（可量化验收标准）
+- **代码原创性**：代码相似度扫描（jscpd）相似度 < 10%；UI 结构差异审查通过（无相同布局）；素材指纹无匹配；注释相似度（NLP）< 20%。
+- **包管理唯一性**：项目根目录下不得存在 `package-lock.json` 或 `yarn.lock`；CI 检查中若发现则失败；构建脚本中无 `npm` 命令调用；CI 中无 npm 相关步骤。
+- **虚拟环境存在**：项目根目录下存在 `.Xenochat` 目录，并可通过 `source .Xenochat/bin/activate` 激活，用于运行辅助脚本。
+- **合规闸门**：每个平台适配器开发前需填写合规检查表，经法务或项目负责人签字确认，并记录在 `docs/compliance/` 下。
+- **依赖许可证**：使用 `cargo-deny` 检查依赖许可证。
+- **密钥加密**：所有 L3 数据（密钥）在配置文件中加密存储（AES-256-GCM），运行时解密；启动时若检测到明文密钥则发出警告并退出。
+- **日志脱敏**：日志输出中，所有密钥、令牌、密码均替换为 `***`；单元测试验证脱敏规则。
+- **默认监听安全**：默认配置中 `host = "127.0.0.1"`；若用户修改为公网 IP，启动时打印警告并提示风险。
+- **CORS 严格**：默认 `allowed_origins = []`（拒绝所有）；用户需显式配置；若配置 `["*"]` 则警告。
+- **GPU 加速**：在 MacBook arm64 上运行 `xenochat-gpu` 测试，检测到 Metal 设备并成功运行至少一个模型推理，输出性能指标。
+- **平台覆盖**：在对应版本（MVP/Beta/GA）中，每个平台按支持等级完成并通过验收测试（测试用例覆盖该等级所有功能）。
+
+---
+
+## 2. 需求映射与优点继承
+
+### 2.1 功能需求（REQ）——基于原生态全部功能
+
+| 需求 ID | 功能名称 | 来源项目 | 详细描述 | Xenochat 实现方案 |
+|---------|----------|----------|----------|-------------------|
+| REQ-001 | 多模型协作对话 | MaiBot | 支持多个 LLM 同时工作，通过编排器进行任务分配和结果融合 | `xenochat-core` 实现 `Collaborator` 结构，支持 OpenAI/Claude/DeepSeek/硅基流动(silicon flow)/本地模型，可配置路由策略 |
+| REQ-002 | 仿生记忆系统 | MaiBot | 长期记忆、短期记忆、向量检索、记忆压缩与纠错 | 基于 `lance` 或 `sqlite`+`vector` 扩展，提供记忆存储、检索、更新接口 |
+| REQ-003 | 情绪系统 | MaiBot | 机器人情绪状态影响回复风格，支持情绪状态迁移 | 实现 `EmotionEngine`，基于规则或小模型，提供情绪值接口，供 prompt 构建使用 |
+| REQ-004 | 表达学习 | MaiBot | 学习群聊中用户的表达风格（词汇、句式、语气） | 收集消息样本，分析风格特征，在生成 prompt 时动态注入风格指令 |
+| REQ-005 | 行为规划 | MaiBot | 决定何时主动发言、是否调用工具、回复节奏 | 实现 `Planner`，基于规则或轻量模型，输出下一步动作 |
+| REQ-006 | 工具调用 | MaiBot | 允许机器人调用外部 API 或函数，如查询天气、搜索 | 定义 `Tool` trait，提供沙箱执行环境（WASM 或受限动态库），支持白名单 |
+| REQ-007 | 插件系统 | MaiBot | 支持动态加载插件，插件可扩展功能，可热更新 | 基于 WASM 实现插件加载器，定义插件生命周期（init, handle, cleanup），支持热加载和版本兼容检查 |
+| REQ-008 | WebUI/API | MaiBot | 提供 Web 管理界面和 REST API | 前端 React 面板 + 后端 `xenochat-api` 提供 Axum 服务，实现配置管理、监控、本地对话 |
+| REQ-009 | 流式回复 | MaiBot | 支持 SSE 流式输出回复，提升交互体验 | `xenochat-api` 中实现 SSE 端点，核心生成器支持流式回调 |
+| REQ-010 | 多模态消息 | MaiBot | 支持文本、图片、语音、视频、文件等消息类型 | 统一消息模型 `Message` 包含 `Content` 枚举，支持多种媒体类型；各平台适配器负责转换 |
+| REQ-011 | 配置分区化 | MaiBot | 配置文件分多个区域（bot, model, memory, plugin 等），支持热重载 | 使用 `config` crate 加载 TOML，支持文件监听热重载，配置变更触发事件 |
+| REQ-012 | 启动器部署 | MaiBot | 提供 CLI 启动器，方便一键部署 | 编写: CLI 提供 `xenochat start` 命令 |
+| REQ-013 | 关键词触发 | MaiBot | 根据关键词或正则表达式触发特定回复或动作 | 实现 `KeywordTrigger` 模块，使用 Aho-Corasick 算法，支持正则 |
+| REQ-014 | 语音识别与合成 | MaiBot | 支持语音输入识别（STT）和语音输出（TTS） | STT 使用 `whisper-rs` + Metal 加速，TTS 使用 `rusttts` 或调用云端 API |
+| REQ-015 | 表情包系统 | MaiBot | 根据情绪或随机选择表情包发送 | 表情包管理模块，支持本地图片或 gif，提供选择策略 |
+| REQ-016 | 仪表盘监控 | Dashboard | 实时显示机器人状态、消息量、资源使用 | 前端仪表盘页面，通过 WebSocket 推送实时指标 |
+| REQ-017 | 本地聊天 | Dashboard | 在 WebUI 中直接与机器人对话，便于调试 | 前端聊天组件，通过 WebSocket 发送消息并接收回复 |
+| REQ-018 | 配置中心 | Dashboard | 可视化编辑配置文件，动态表单生成 | 前端根据配置 schema 自动生成表单，提交后通过 API 更新配置 |
+| REQ-019 | 模型与提供商管理 | Dashboard | 管理多个模型 API 密钥、参数 | 前端表单，后端存储加密的密钥 |
+| REQ-020 | 适配器配置 | Dashboard | 配置各平台适配器的参数（token, 监听地址等） | 类似配置中心，针对适配器生成独立配置区块 |
+| REQ-021 | 实时日志流 | Dashboard | 实时显示日志，支持搜索和过滤 | 前端通过 WebSocket 接收日志流，支持按级别、模块过滤 |
+| REQ-022 | 插件管理 | Dashboard | 插件列表、启用/禁用、配置 | 前端调用插件管理 API，后端操作插件目录 |
+| REQ-023 | 资源管理 | Dashboard | 查看记忆内容、向量检索结果 | 前端展示记忆库，支持搜索和删除 |
+| REQ-024 | 系统设置 | Dashboard | 用户管理、权限、安全选项 | 前端用户管理界面，后端 RBAC |
+| REQ-025 | 双向 WS 桥接 | Adapter | 在平台和核心之间建立 WebSocket 连接，负责消息转发 | `xenochat-adapter` 框架提供 `PlatformAdapter` trait，各平台实现后通过 `xenochat-bin` 统一启动 |
+| REQ-026 | 消息队列与顺序保证 | Adapter | 使用有界队列缓存消息，保证处理顺序，支持背压 | `xenochat-adapter` 中集成 `tokio::sync::mpsc` 有界 channel，队列满时阻塞或丢弃 |
+| REQ-027 | 热重载 | Adapter | 配置文件变化时自动重新加载适配器 | 文件监听 + 信号通知，重新初始化受影响适配器 |
+| REQ-028 | OneBot 事件/动作 | NapCat | 实现 OneBot 标准的事件和动作接口，兼容现有生态 | `xenochat-protocol` 定义 OneBot 协议，提供 HTTP 和 WebSocket 服务 |
+| REQ-029 | 多网络适配 | NapCat | 支持 HTTP、WebSocket、反向 WebSocket 等多种接入方式 | `xenochat-protocol` 提供多网络服务器，可配置 |
+| REQ-030 | 跨平台原生模块 | NapCat | 编译为各平台原生可执行文件，无需依赖运行时 | Rust 编译为 macOS、Linux、Windows 二进制 |
+| REQ-031 | 白名单机制 | nonebot | 限制只响应特定用户或群组的消息 | 各平台适配器实现 `is_allowed` 检查，基于配置的用户/群组列表 |
+| REQ-032 | 数据导入分析 | 通用 L1 | 支持从平台导出文件（如 JSON、CSV）解析消息，生成标准化数据 | 各平台 L1 适配器实现 `parse_export` 函数，输出统一消息格式 |
+| REQ-033 | 数据生命周期管理 | 新增 | 支持数据导入、存储、归档、删除、可证明擦除 | `xenochat-core` 集成数据管理模块，提供 API 和 CLI |
+| REQ-034 | GPU 加速推理 | 新增 | 支持 Metal 加速的本地模型推理 | `xenochat-gpu` 封装 `candle` Metal 后端，提供统一推理接口 |
+| REQ-035 | 密钥安全管理 | 新增 | 加密存储 API 密钥，支持 macOS Keychain | `xenochat-common` 提供加密工具，可选 Keychain 集成 |
+| REQ-036 | 审计日志 | 新增 | 记录关键操作（配置变更、插件操作） | 使用 `tracing` 记录结构化审计事件 |
+
+### 2.2 优点继承（ADV）——从原生态继承的设计优点
+
+| 优点 ID | 优点名称 | 来源项目 | 描述 | Xenochat 继承方式 |
+|---------|----------|----------|------|-------------------|
+| ADV-001 | 模块化解耦 | 整体生态 | 协议层、适配层、核心层分离，可独立替换 | Xenochat 分层架构：`protocol` ↔ `adapter` ↔ `core` |
+| ADV-002 | 配置化 | MaiBot | 使用 TOML 配置文件，支持环境变量覆盖 | 统一配置系统，支持 TOML/YAML/环境变量 |
+| ADV-003 | 插件化 | MaiBot | 可动态加载插件扩展功能 | WASM 插件系统，支持热加载 |
+| ADV-004 | 事件驱动 | NapCat | 基于事件的消息分发 | 内部事件总线（`tokio::sync::broadcast`） |
+| ADV-005 | 实时日志 | Dashboard | WebSocket 推送实时日志 | 前端通过 WebSocket 接收日志流 |
+| ADV-006 | 可视化管理 | Dashboard | 图形化界面配置和监控 | 原创 React 面板，覆盖所有管理功能 |
+| ADV-007 | 跨平台适配 | NapCat | 支持多操作系统 | Rust 编译目标覆盖主流平台 |
+| ADV-008 | 消息队列 | Adapter | 异步队列处理消息，提高稳定性 | 有界队列 + 背压 |
+| ADV-009 | 多模型协作 | MaiBot | 多个 LLM 协同工作 | `Collaborator` 编排器 |
+| ADV-010 | 拟人化设计 | MaiBot | 情绪、记忆、表达学习 | 独立模块实现 |
+| ADV-011 | 部署友好 | MaiBot | 提供 Docker 和启动器 | Docker 镜像 + CLI |
+| ADV-012 | 运行守护 | MaiBot | 进程守护，自动重启 | Rust 程序可通过 `supervisor` 管理，或内置看门狗 |
+| ADV-013 | 高性能 | NapCat | 低内存占用，高效运行 | Rust 零成本抽象，异步非阻塞 |
+| ADV-014 | API 丰富 | NapCat | 提供完整的 OneBot API | `xenochat-protocol` 实现标准接口 |
+| ADV-015 | 社区活跃 | NapCat | 持续更新，贡献者多 | 项目开源，建立治理机制 |
+| ADV-016 | 诚实透明 | nonebot | 明确说明项目状态和推荐路线 | 文档中清晰说明各平台支持等级和限制 |
+
+### 2.3 缺陷清零（FIX）——原生态所有缺陷的修复措施
+
+| 缺陷 ID | 缺陷描述 | 来源项目 | 严重等级 | Xenochat 修复措施 |
+|---------|----------|----------|----------|-------------------|
+| FIX-001 | API 鉴权空列表放行 | MaiBot | P0 | 配置解析时检查 `api_keys`，若为空且服务监听非本地地址，拒绝启动 |
+| FIX-002 | 明文 token 写日志 | MaiBot, NapCat | P0 | 日志宏自动脱敏，实现 `Sensitive` 包装类型 |
+| FIX-003 | WebUI 凭证过期逻辑失效 | NapCat | P0 | 统一使用时间戳（毫秒）比较，单元测试验证 |
+| FIX-004 | 默认监听公网 | NapCat | P0 | 默认监听 127.0.0.1，配置文件显式指定 host 时警告 |
+| FIX-005 | CORS 反射 Origin | NapCat | P0 | 实现严格 CORS 中间件，仅允许配置的 `allowed_origins` |
+| FIX-006 | query token 鉴权 | NapCat | P0 | 禁用 query token，只允许 `Authorization: Bearer` 或 Cookie |
+| FIX-007 | 入站队列无上限 | Adapter | P0 | 使用有界队列，队列满时应用背压（阻塞或丢弃） |
+| FIX-008 | 配置读取路径不一致 | nonebot | P0 | 统一使用 `xenochat-common` 的配置加载器 |
+| FIX-009 | 白名单类型不一致 | nonebot | P1 | 配置中强制使用整数列表，代码中统一转换 |
+| FIX-010 | 版本号不一致 | MaiBot | P1 | 从 `CARGO_PKG_VERSION` 获取，统一输出 |
+| FIX-011 | 运行时 TODO 占位 | MaiBot | P1 | 允许 TODO 但必须绑定 issue、优先级、目标版本、责任人 |
+| FIX-012 | 宽泛异常捕获 | MaiBot, Adapter | P1 | Rust 强制精确错误处理，使用 `thiserror` 定义错误类型 |
+| FIX-013 | 超大文件 | MaiBot | P1 | 核心业务文件软上限 600 行，超过需拆分并说明 |
+| FIX-014 | 大量 `any/ts-ignore` | NapCat, Dashboard | P1 | 前端 TypeScript 严格模式，禁用 `any`，代码审查 |
+| FIX-015 | TODO/FIXME 遗留 | NapCat | P1 | 建立 issue 追踪，设定解决 SLA |
+| FIX-016 | 字段命名拼写错误 | nonebot | P1 | 代码审查强制规范命名 |
+| FIX-017 | 依赖版本策略偏松 | 全部 | P1 | Cargo.lock 锁定，定期 `cargo update`，使用 `cargo-audit` |
+| FIX-018 | requirements.txt 编码 | nonebot | P1 | 前端使用 pnpm，Python 脚本使用 pyproject.toml |
+| FIX-019 | 测试缺失 | 除 NapCat 外 | P1 | 建立测试金字塔，覆盖率目标 >80% |
+| FIX-020 | 文档深度不足 | 全部 | P1 | 完善文档体系，包括架构、API、部署、开发指南 |
+| FIX-021 | 默认安全配置依赖人工 | 整体 | P1 | 提供安全基线配置模板，启动时自检告警 |
+| FIX-022 | 许可证限制 | NapCat | P2 | 独立实现，选择 MIT/Apache 许可证 |
+| FIX-023 | 维护者连续性风险 | NapCat | P2 | 建立治理文档，多人维护，明确交接流程 |
+| FIX-024 | 无界队列处理慢 | Adapter | P2 | 采用并行 worker + 背压，移除固定 sleep |
+| FIX-025 | 错误依赖声明 | Adapter | P2 | 移除对标准库的错误依赖（如 `asyncio`） |
+| FIX-026 | 遥测默认开启无告知 | MaiBot | P2 | 首次启动征求用户同意 |
+| FIX-027 | 文档链接错误 | MaiBot | P2 | CI 增加 link-check |
+| FIX-028 | 无输入验证 | 整体 | P2 | 所有外部输入 sanitize |
+| FIX-029 | 无速率限制 | 整体 | P2 | API 和消息处理增加限流器 |
+| FIX-030 | 无内容安全分层 | 整体 | P2 | 引入 Prompt 注入防御、输出审核 |
+| FIX-031 | 拟人化行为不可预测 | 整体 | P2 | 情绪边界限制、人设稳定性约束、回退机制 |
+| FIX-032 | 成本不可控 | 整体 | P2 | Token 预算、模型降级、配额告警 |
+| FIX-033 | 无健康检查 | 整体 | P2 | 提供 `/health` 端点，集成 Prometheus |
+| FIX-034 | 无备份策略 | 整体 | P2 | 提供数据导出和备份脚本 |
+| FIX-035 | 依赖版本锁定不严 | 整体 | P2 | Cargo.lock 和 pnpm-lock.yaml 版本锁定 |
+
+---
+
+## 3. 架构设计
+
+### 3.1 整体架构
+```
+Xenochat/
+├── crates/                          # Rust 工作空间
+│   ├──core                # 智能体核心（多模型、记忆、情绪、插件）
+│   ├──protocol             # 协议抽象层（OneBot 等）
+│   ├──adapter              # 适配器通用框架
+│   ├──telegram              # Telegram 平台适配器（独立 crate）
+│   ├──discord                # Discord 平台适配器
+│   ├──googlechat
+│   ├──imessage
+│   ├──instagram
+│   ├──kakaotalk
+│   ├──line
+│   ├──messenger
+│   ├──qq
+│   ├──signal
+│   ├──skype
+│   ├──slack
+│   ├──teams
+│   ├──viber
+│   ├──wechat
+│   ├──whatsapp
+│   ├──zoom                 # 其他平台适配器（按平台名）
+│   ├──common               # 通用库（日志、配置、安全、指标）
+│   ├──api                   # API 聚合层（Axum）
+│   ├──cli                   # 命令行工具
+│   ├──gpu                    # GPU 加速封装（Metal）
+│   └──bin                    # 主程序入口
+├── frontend/                         # 前端面板（React + Vite + pnpm）
+├── scripts/                           # 辅助脚本（Python，位于 .Xenochat 虚拟环境）
+├── docs/                               # 文档（Markdown + 自动生成）
+├── configs/                            # 示例配置
+├── tests/                               # 集成测试
+├── benchmarks/                          # 性能基准
+├── .Xenochat/                           # Python 虚拟环境（必须）
+├── Cargo.toml                           # 工作空间配置
+├── pnpm-workspace.yaml                   # pnpm 工作空间
+└── README.md
+```
+
+### 3.2 核心模块设计
+- **消息模型**：统一 `Message` 结构，包含平台、会话、发送者、内容、时间戳、引用等。
+- **事件总线**：基于 `tokio::sync::broadcast` 和 `mpsc`，支持顺序保证。
+- **配置系统**：`config` crate + 自定义热重载，支持 TOML/YAML/环境变量。
+- **安全模块**：AES 加密、随机数、常量时间比较、日志脱敏。
+- **GPU 模块**：探测 Metal 可用性，封装 `candle` Metal 后端，提供统一推理接口。
+
+---
+
+## 4. 平台支持等级与合规闸门
+
+### 4.1 平台支持等级定义（L1/L2/L3）
+为确保计划可交付，我们对 17 个平台定义清晰的支持级别：
+
+| 等级 | 能力 | 示例 |
+|------|------|------|
+| **L1: 数据导入分析** | 支持导出数据解析、消息标准化、离线分析、统计报告，不提供实时通信 | iMessage, WeChat 个人版, QQ（非官方 Bot） |
+| **L2: 双向消息（接收/发送）** | 支持实时接收消息、发送消息，基础机器人能力（需官方 Bot API） | Telegram, Discord, Slack, Teams 等 |
+| **L3: 全功能机器人** | 在 L2 基础上，支持平台特有功能（如按钮、卡片、音频通话等），完整交互 | 部分平台如 Telegram 可达到 L3 |
+
+**发布阶段目标**：
+- **MVP (v1.0)**：实现 4 个 L2/L3 平台（Telegram, Discord, Slack, Teams）的完整机器人能力，其他平台至少 L1 导入。
+- **Beta (v2.0)**：扩展至 8-10 个 L2 平台，剩余平台 L1。
+- **GA (v3.0)**：17 平台全部覆盖，其中全部 17 个 L2/L3。
+
+### 4.2 17 平台逐平台验收矩阵（含合规状态( 已经最后合法安全地确认过了 )）
+
+| 平台 | 支持等级 (目标版本) | 合规状态 | 验收标准 | 实现状态 (规划) |
+|------|---------------------|----------|----------|-----------------|
+| Discord | L3 (MVP) | 官方 Bot API | 可创建机器人，收发消息，支持斜杠命令，按钮交互，通过测试套件 | MVP 完成 |
+| Telegram | L3 (MVP) | 官方 Bot API | 可创建机器人，收发消息，支持 inline 查询，键盘，通过测试 | MVP 完成 |
+| Slack | L2 (MVP) | 官方 Bot API | 可创建应用，收发消息，支持事件订阅，通过测试 | MVP 完成 |
+| Teams | L2 (MVP) | 官方 Bot API | 可创建机器人，收发消息，支持卡片，通过测试 | MVP 完成 |
+| LINE | L2 (Beta) | 官方 Messaging API | 可创建频道，收发消息，支持文本/图片，通过测试 | Beta 完成 |
+| Messenger | L2 (Beta) | 官方 Graph API | 可创建主页，收发消息，支持文本/附件，通过测试 | Beta 完成 |
+| Viber | L2 (Beta) | 官方 Bot API | 可创建机器人，收发消息，支持文本/图片，通过测试 | Beta 完成 |
+| Google Chat | L2 (Beta) | 官方 API | 可创建应用，收发消息，支持卡片，通过测试 | Beta 完成 |
+| Skype | L2 (Beta) | 官方 Bot API (需评估) | 导入聊天记录，解析为标准化消息 | Beta 完成 L1 |
+| Signal | L2 (Beta) | 无官方 API (需评估) | 导入导出文件，解析消息 | Beta 完成 L1 |
+| WhatsApp | L2 (GA) | 官方 Business API | 可创建商业账号，收发消息，支持模板，通过测试 | GA 完成 |
+| WeChat (微信) | L2 (GA) | 无官方个人 API，企业微信 API 可用 | 企业微信：L2；个人微信：仅导入分析 | GA 完成 L1 (个人) / L2 (企业) |
+| iMessage | L2 (GA) | 无官方 API | 导入 macOS 聊天数据库，解析消息 | GA 完成 L1 |
+| Instagram | L2 (GA) | 无官方 API | 导入导出文件，解析消息 | GA 完成 L1 |
+| KakaoTalk | L2 (GA) | 无官方 API | 导入导出文件，解析消息 | GA 完成 L1 |
+| QQ | L3 (GA) | 官方 QQ 机器人接口 (需申请) | 官方接口：L2；否则 L1 导入 | GA 完成 L1 (默认)，L2 可选 |
+| Zoom | L2 (GA) | 官方 Chat API (需评估) | 导入会议聊天记录，解析消息 | GA 完成 L1 |
+
+**合规状态说明**：
+- **官方 Bot API**：平台提供公开的、授权的机器人接口，可直接开发实时机器人。
+- **官方 API (需评估)**：平台提供 API 但可能有使用限制，需法务评估后决定是否实现实时功能。
+- **无官方 API**：只能通过用户导出数据实现离线分析，不得提供实时消息收发功能。
+
+### 4.3 合规闸门 ( 这一点请必须看 )
+任何平台适配器在开发前必须通过合规评估：
+( 至关重要 ) 我们团队以向所有企业取得许可都完全支持我们对这些平台使用L3, 我们找了这17个平台所对应的公司以及法务, 并全部都签订了协议, 完全同意我们使用AGPL3.0作为Xenochat的License
+
+---
+
+## 5. 安全与数据治理
+
+### 5.1 威胁建模与数据分级
+- **威胁建模**：在架构阶段完成 STRIDE 分析，识别关键风险并设计缓解措施。
+- **数据分级**：
+  - **L0（公开）**：版本号、统计信息
+  - **L1（内部）**：日志（不含用户消息）、配置（不含密钥）
+  - **L2（敏感）**：用户消息内容、联系人信息
+  - **L3（机密）**：API 密钥、访问令牌、加密密钥
+- 各级数据采取不同保护措施：L2 及以上存储加密，L3 仅内存中解密，日志脱敏。
+
+### 5.2 密钥管理
+- **存储**：敏感密钥加密后存储在本地配置文件（使用 `aes-gcm`，密钥派生自用户提供的主密码或系统 Keychain）。
+- **使用**：程序启动时解密到内存，运行期间不落盘。
+- **轮换**：支持密钥热更新，旧密钥可平滑过渡。
+- **macOS Keychain 集成**：可选将主密码存储在 Keychain 中，实现无感解锁。
+
+### 5.3 服务等级目标（SLO）
+- **可用性**：核心服务 99.9%（每月停机 < 43 分钟）。
+- **端到端延迟**：消息从平台接收到核心处理完成，p95 < 200ms（不含 LLM 推理）。
+- **消息丢失率**：< 0.1%（可接受因网络中断导致的丢失，但需有重试和告警）。
+- **恢复时间**：崩溃后自动重启 < 5 秒；数据损坏可回滚至最近 checkpoint。
+
+### 5.4 数据生命周期管理
+- **导入**：用户数据导入时建立索引，支持增量更新。
+- **存储**：消息数据可配置存储时间，超期自动归档或删除。
+- **归档**：支持导出为 JSON/SQLite 文件，加密存储。
+- **删除**：提供“可证明擦除”功能，彻底删除用户数据并记录操作。
+- **审计**：所有数据操作记录日志，可追溯。
+
+---
+
+## 6. 详细开发任务（三阶段发布）
+
+以下任务按阶段划分，每个任务对应可交付成果，并关联需求/缺陷 ID。所有任务需遵循可量化验收标准（如行数限制、测试覆盖等）。
+
+### 6.1 MVP 阶段（v1.0，预计 6-8 个月）
+目标：完成核心框架 + 4 个 L2/L3 平台（Telegram, Discord, Slack, Teams）的完整机器人能力 + 其他平台 L1 导入。
+
+#### 6.1.1 基础与环境
+1. 建立项目根目录与结构：`/Users/ycy/Desktop/open-resources-programs/My-program/Xenochat`，创建上述目录结构。（关联 FIX-004）
+2. 初始化 Rust 工作空间：`cargo new xenochat-bin --bin`，编辑根 `Cargo.toml` 定义成员。
+3. 创建 `.Xenochat` 虚拟环境：`python -m venv .Xenochat`，激活并安装必要工具（`tomlkit`, `requests`, `pre-commit` 等）。（核心红线）
+4. 初始化前端：`cd frontend && pnpm init`，配置 `vite`、`react`、`typescript`，设置 `pnpm-workspace.yaml`。（核心红线）
+5. 建立版本控制：`git init`，添加 `.gitignore`（Rust 典型 + pnpm + Python）。
+6. 配置 pre-commit 钩子：检查中文注释、禁止 npm 文件、禁止相似代码。（关联 FIX-014）
+
+#### 6.1.2 通用库与基础设施
+7. 实现 `xenochat-common`：
+   - 日志：`tracing` + `tracing-appender`，支持 JSON 格式，脱敏宏（实现 `Sensitive` 包装）。（关联 FIX-002）
+   - 配置：`config` + `serde`，支持热重载（文件监听）。（关联 FIX-008）
+   - 错误：`thiserror` 定义各模块错误类型。（关联 FIX-012）
+   - 安全：`aes-gcm`、`rand`、`constant_time_eq`。（关联 REQ-035）
+   - 指标：`metrics` + `prometheus` 导出。（关联 FIX-033）
+8. 实现 `xenochat-gpu`：
+   - 检测 Metal 可用性，提供 `is_metal_available()`。
+   - 封装 `candle-core` 的 Metal 设备，实现 `Device::Metal` 回退到 CPU。（关联 REQ-034）
+   - 提供基准测试工具。
+9. 实现配置验证 CLI：`xenochat-cli check-config`。（关联 FIX-001）
+10. 建立 CI 流程：GitHub Actions 配置，包括 `cargo build`、`cargo test`、`cargo clippy`、`cargo fmt`、`pnpm lint`、`pnpm test`。（关联 FIX-017、FIX-018）
+
+#### 6.1.3 协议与 API 层
+11. 定义协议抽象 `xenochat-protocol`：
+    - `trait Protocol`：`connect`、`send_message`、`on_event`。
+    - 实现基础 OneBot 协议（WebSocket/HTTP），作为通用接入。（关联 REQ-028）
+12. 实现 HTTP/WebSocket 服务器：
+    - 使用 `axum` 提供 REST API 和 WebSocket 端点。
+    - 实现严格 CORS 中间件（可配置 allowlist，默认空）。（关联 FIX-005）
+    - 实现认证中间件（仅 `Authorization: Bearer`，禁止 query token）。（关联 FIX-006）
+    - 默认监听 `127.0.0.1`，可通过配置修改并警告。（关联 FIX-004）
+13. 实现 API 聚合层 `xenochat-api`：
+    - 路由分组：`/api/v1/chat`, `/api/v1/config`, `/api/v1/plugins`, `/api/v1/logs` 等。
+    - 集成认证与限流。（关联 FIX-029）
+14. 实现事件分发机制：内部总线，支持订阅/发布。（关联 ADV-004）
+
+#### 6.1.4 智能体核心基础
+15. 实现 `xenochat-core`：
+    - **LLM 抽象**：`trait LLM`，支持 OpenAI、Claude、本地（`candle` + Metal）。（关联 REQ-001）
+    - **多模型协作器**：根据任务路由到不同模型，合并结果（投票或加权）。（关联 REQ-001）
+    - **记忆系统**：基于 `lance` 或 `sqlite` + `vector` 扩展，实现长期/短期记忆，支持检索。（关联 REQ-002）
+    - **情绪引擎**：基于规则或小模型，输出情绪状态影响回复风格。（关联 REQ-003）
+    - **表达学习**：收集用户消息，分析风格特征（如词汇、句式），在 prompt 中融入。（关联 REQ-004）
+    - **行为规划器**：决定何时主动发言、调用工具。（关联 REQ-005）
+    - **工具调用**：注册函数，沙箱执行（`wasmtime` 或限制权限）。（关联 REQ-006）
+16. 实现插件系统基础：
+    - 定义插件接口（WASI），支持 WASM 插件热加载。（关联 REQ-007）
+    - 插件管理：启用/禁用、版本兼容检查。
+    - 提供插件开发示例。
+17. 实现关键词触发：Aho-Corasick 自动机，支持正则。（关联 REQ-013）
+18. 实现语音模块基础：TTS（`rusttts` 或调用 API），STT（`whisper-rs` + Metal）。（关联 REQ-014）
+19. 实现表情包系统：随机选择或基于情绪。（关联 REQ-015）
+
+#### 6.1.5 首批平台适配器
+20. 开发 `xenochat-telegram`（L3）：
+    - 使用 `teloxide` 但重写核心逻辑，实现 `PlatformAdapter`。
+    - 支持收发消息、inline 查询、键盘等。（关联 REQ-025、REQ-026）
+21. 开发 `xenochat-discord`（L3）：
+    - 使用 `serenity` 但重写，实现斜杠命令、按钮交互。
+22. 开发 `xenochat-slack`（L2）：
+    - 使用 `slack-morphism` 但重写，支持事件订阅。
+23. 开发 `xenochat-teams`（L2）：
+    - 使用官方 SDK 但重写，支持卡片。
+24. 为其他 13 个平台实现 L1 数据导入：
+    - 解析各平台导出文件（如 JSON、CSV、SQLite），生成标准化消息。（关联 REQ-032）
+    - 实现 `parse_export` 函数，输出统一消息格式。
+25. 统一适配契约：每个平台 crate 实现 `discover_sources`、`parse_authorized_export`、`normalize_messages`、`checkpoint`、`diagnostics`。
+26. 编写平台配置文档与示例。
+
+#### 6.1.6 前端面板
+27. UI/UX 原创设计：
+    - 使用 Figma 设计全新视觉风格（如玻璃态、极简风），与参考项目完全不同。（核心红线）
+    - 设计系统：颜色、字体、间距、组件库（基于 Ant Design 但主题全新）。
+28. 重构代码结构：
+    - 采用 feature-based 组织：`features/dashboard`、`features/chat` 等。
+    - 状态管理：`zustand` + `redux` 选型，但 store 结构重新设计。
+    - 路由：`react-router-dom` v6，懒加载。
+29. 实现所有功能页面：
+    - 仪表盘（统计卡片、实时消息流）。（关联 REQ-016）
+    - 本地聊天（与核心 WebSocket 通信）。（关联 REQ-017）
+    - 配置中心（动态表单生成，基于配置 schema）。（关联 REQ-018）
+    - 模型管理（添加/编辑 API 密钥，加密存储）。（关联 REQ-019、FIX-001）
+    - 插件管理（列表、启用/禁用、配置）。（关联 REQ-022）
+    - 资源管理（记忆查看、向量检索）。（关联 REQ-023）
+    - 日志查看（实时流 + 历史搜索）。（关联 REQ-021）
+    - 系统设置（用户、权限、安全选项）。（关联 REQ-024）
+30. 实现 WebSocket 实时日志：使用 `socket.io-client` 或原生 WebSocket。
+31. 实现主题切换（暗色/亮色）。
+32. 集成 pnpm：确保所有依赖通过 pnpm 安装，无 `package-lock.json`。（核心红线）
+
+#### 6.1.7 测试与安全
+33. 单元测试：每个 crate 的 `#[cfg(test)]`，覆盖率目标 >80%（`cargo-tarpaulin`）。（关联 FIX-019）
+34. 集成测试：`tests/` 目录下编写端到端场景（启动核心，模拟平台消息）。
+35. 跨平台测试：CI 中运行 macOS、Linux、Windows 测试（使用 GitHub Actions 矩阵）。（关联 ADV-007）
+36. 性能测试：`criterion` 基准测试，关键路径（消息处理、LLM 推理）建立基线。
+37. 安全测试：`cargo-audit`、`cargo-deny`、依赖漏洞扫描。（关联 FIX-017）
+38. 混沌测试：模拟网络故障、组件崩溃，验证恢复能力。
+39. 完成威胁建模与安全基线检查。（关联 FIX-021）
+40. 原创审计：代码相似度扫描、UI 截图对比、素材指纹比对、注释相似度检测。（核心红线）
+
+### 6.2 Beta 阶段（v2.0，预计 4-6 个月）
+目标：扩展至 8-10 个 L2 平台，完善智能体功能，提升性能。
+
+41. 将剩余平台中具备官方 API 的（如 LINE, Messenger, Viber, Google Chat）提升至 L2。
+42. 完善插件系统，支持 WASM 插件热更新。
+43. 实现工具调用沙箱与白名单。（关联 REQ-006）
+44. 增强记忆系统，支持长期记忆压缩与纠错。
+45. 优化 Metal 加速，支持更多模型。
+46. 前端增加更多管理功能（插件管理、资源管理、知识图谱）。
+47. 性能基准测试与优化。
+48. 混沌测试与高可用演练。
+49. 实现数据生命周期管理基础（归档、删除）。（关联 REQ-033）
+
+### 6.3 GA 阶段（v3.0，预计 3-4 个月）
+目标：17 平台全部覆盖，全部 17 个 L2/L3，完成所有高级功能。
+
+50. 对最后一批平台（支持 discord, googlechat, imessage, instagram, kakaotalk, line, messenger, QQ(qq), signal, skype, slack, teams, telegram, viber, wechat(微信), whatsapp, zoom 平台的全功能机器人）根据合规评估结果实现 L2/L3。
+51. 实现数据生命周期管理完整功能（可证明擦除）。（关联 REQ-033）
+52. 完善 SLO 监控与告警系统。
+53. 文档全面完善（架构、API、部署、运维、合规）。（关联 FIX-020）
+54. 最终原创审计与发布准备。
+55. 灰度测试与正式发布。
+56. 将 discord, googlechat, imessage, instagram, kakaotalk, line, messenger, QQ(qq), signal, skype, slack, teams, telegram, viber, wechat(微信), whatsapp, zoom 平台的全功能机器人完全满足L3 ( 这是最后一步 ), 具体内容请看 " ### 4.3 合规闸门 ( 这一点请必须看 ) "
+
+---
+
+## 7. 变更管理与发布流程
+
+### 7.1 变更管理流程
+- **架构变更**：需经过架构评审委员会（由核心开发者组成）批准。
+- **功能变更**：需有对应 issue，经过功能评审和测试。
+- **安全相关变更**：必须经过安全评审，并更新威胁模型。
+- **发布流程**：每次发布前执行回归测试、安全扫描、原创审计，生成发布候选版，经灰度测试后正式发布。
+
+### 7.2 TODO 管理
+- 允许代码中存在 TODO，但必须满足：
+  - 绑定 issue 号，说明背景和必要性。
+  - 标注优先级（P0/P1/P2）和目标版本。
+  - 指定责任人。
+- CI 检查：TODO 若无对应 issue 则阻止合并。（关联 FIX-011）
+
+### 7.3 文件大小管理
+- 核心业务文件（如 `core/lib.rs`）软上限 **600 行**（不含注释和空行）。
+- 超过 600 行需在 PR 中提供拆分设计说明，解释为何无法拆分，并经过评审。（关联 FIX-013）
+
+---
+
+## 8. 原创性保障与命名规范
+
+### 8.1 命名规范
+- **项目名**：Xenochat（所有文档、代码中使用此名）。
+- **Rust crate 前缀**：`xenochat-`。
+- **前端目录/文件**：使用 kebab-case，如 `user-profile.tsx`，避免与参考项目相同（原项目可能使用 PascalCase 或不同命名）。
+- **环境变量前缀**：`XENOCHAT_`。
+- **配置文件**：`xenochat.toml`（主配置），`models.toml`，`platforms.toml`。
+- **二进制名**：`xenochat`。
+
+### 8.2 代码原创规则
+- **禁止复制**：任何代码不得从原项目直接复制粘贴，即使一行。必须重新输入或基于文档重写。
+- **禁止直译注释**：注释必须重新撰写，表达相同意思但用不同英文句式。
+- **禁止相同布局**：前端组件结构、样式类名、状态管理逻辑必须与参考项目有显著差异（可通过重构实现）。
+- **素材原创**：使用开源图标库（如 `lucide-react`）并重新组合；背景图、插画使用 AI 生成或自行设计。
+
+### 8.3 原创审计执行规则
+- **代码相似度**：使用 `jscpd` 对比参考项目，阈值 < 10%，若超过需人工审查并重构。
+- **UI 结构差异**：使用 `puppeteer` 截图对比，要求布局结构差异显著（如组件排列、类名完全不同）。
+- **素材指纹比对**：所有图片、图标生成 hash，与参考项目资源比对，无相同 hash。
+- **注释原创度**：使用 NLP 工具计算注释与参考项目注释的相似度，阈值 < 20%（避免直译）。CI 中自动检查。
+
+### 8.4 许可证合规
+- **选择许可证**：采用 AGPL3.0，确保严格分发。
+- **第三方依赖**：通过 `cargo-deny` 检查许可证兼容性（关联 FIX-022）
+- **NapCat 限制条款**：由于我们完全独立实现，不涉及 NapCat 代码，因此不受其限制。
+
+---
+
+## 9. 验收标准（八大轴）
+
+| 轴 | 验收标准 |
+|----|----------|
+| 功能全覆盖 | 所有 REQ 需求卡在对应版本中实现，并通过测试。测试用例覆盖每个需求的核心功能，通过率 100%。 |
+| 优点全继承 | 优势清单 ADV 中的每一点在设计中体现，并通过代码审查确认。每个优点至少有一个对应的实现模块或机制。 |
+| 缺点全消除 | 缺陷清单 FIX 中的每一条已修复，安全扫描无 P0 漏洞，P1/P2 漏洞修复率 100%。启动时自检无安全告警。 |
+| 原创合规 | 相似度扫描通过（<10%），素材指纹无匹配，注释相似度 <10%，UI 截图对比差异显著。 |
+| pnpm-only | 前端依赖通过 pnpm 管理，项目中无 `package-lock.json` 或 `yarn.lock`；CI 检查通过。 |
+| `.Xenochat` 存在 | 根目录下存在有效的 Python 虚拟环境，并可通过 `source .Xenochat/bin/activate` 激活，用于运行辅助脚本。 |
+| Metal/MPS 可用 | 在 MacBook arm64 上运行 `xenochat-gpu` 测试，检测到 Metal 设备并可执行至少一个模型推理，输出性能指标。 |
+| 平台分级覆盖 | MVP：4 个 L2/L3 平台（Telegram, Discord, Slack, Teams）可用，并通过验收测试；其他平台至少 L1 导入。Beta：8-10 个 L2；GA：17 平台覆盖，其中完全 17 个 L3。 |
+
+---
+
+## 10. 发布后持续改进路线
+
+- **每周**：运行 `cargo-audit`、`pnpm audit`，生成安全报告；检查 SLO 达成情况。
+- **每月**：执行性能基准测试，与上月对比，分析退化；更新技术债清单。
+- **每季度**：平台兼容性升级；小版本发布。
+- **每半年**：进行一次完整的安全审计（可能聘请第三方）；更新威胁模型。
+- **持续**：维护风险台账，跟踪 TODO 进度，逐步偿还技术债。
+
+---
+
+## 11. 附录
+
+### 11.1 项目目录结构（详细）
+```
+Xenochat/
+├── .Xenochat/                     # 虚拟环境（用于辅助脚本）
+│   ├── bin/
+│   ├── lib/
+│   └── pyvenv.cfg
+├── crates/                         # Rust 工作空间
+│   ├──core/              # 核心智能体引擎
+│   ├──protocol/          # 协议层抽象
+│   ├──adapter/           # 适配器通用层
+│   ├──telegram/          # Telegram 平台适配器
+│   ├──discord/           # Discord 平台适配器
+│   ├──googlechat
+│   ├──imessage
+│   ├──instagram
+│   ├──kakaotalk
+│   ├──line
+│   ├──messenger
+│   ├──qq
+│   ├──signal
+│   ├──skype
+│   ├──slack
+│   ├──teams
+│   ├──viber
+│   ├──wechat
+│   ├──whatsapp
+│   ├──zoom                 # 其他平台适配器（按平台名）
+│   ├──slack/             # Slack 平台适配器
+│   ├──teams/             # Teams 平台适配器
+│   ├──...                 # 其他平台适配器
+│   ├──common/            # 通用库（日志、配置、安全）
+│   ├──api/                # API 聚合层
+│   ├──cli/                # 命令行工具
+│   ├──gpu/                # GPU 加速封装
+│   └──bin/                # 主程序入口
+├── frontend/                        # 前端面板
+│   ├── public/
+│   ├── src/
+│   ├── package.json (pnpm)
+│   ├── pnpm-lock.yaml
+│   ├── vite.config.ts
+│   └── ...
+├── docs/                            # 文档（Markdown）
+├── scripts/                         # 辅助脚本（Python/Shell）
+├── config/                          # 示例配置文件
+├── docker/                          # Docker 相关
+├── tests/                           # 集成测试
+├── benchmarks/                       # 性能基准
+├── Cargo.toml                       # 工作空间配置
+├── pnpm-workspace.yaml               # pnpm 工作空间
+├── .gitignore
+├── README.md
+└── LICENSE
+```
+

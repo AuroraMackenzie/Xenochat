@@ -1,0 +1,19 @@
+# Model provider routing baseline
+[router]
+default_provider = "local"
+strategy = "weighted"
+
+[providers.local]
+kind = "candle"
+model = "qwen2.5-7b-instruct"
+prefer_metal = true
+
+[providers.openai]
+kind = "openai"
+model = "gpt-4.1"
+api_key_env = "XENOCHAT_OPENAI_KEY"
+
+[providers.claude]
+kind = "anthropic"
+model = "claude-3-7-sonnet"
+api_key_env = "XENOCHAT_ANTHROPIC_KEY"

@@ -1,0 +1,19 @@
+repos:
+  - repo: local
+    hooks:
+      - id: no-npm-lock
+        name: Block npm/yarn lock files
+        entry: scripts/check_no_npm.sh
+        language: system
+        pass_filenames: false
+      - id: originality-audit
+        name: Run originality hash audit
+        entry: scripts/originality_audit.py
+        language: system
+        pass_filenames: false
+      - id: no-chinese-comments
+        name: Block Chinese comments in source files
+        language: pygrep
+        entry: "(#|//|/\\*).*?[\\u4e00-\\u9fff]"
+        types: [text]
+        exclude: "(Xenochat项目蓝图\\.txt|前身项目总结\\.txt)"

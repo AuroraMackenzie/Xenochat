@@ -1,0 +1,14 @@
+[project]
+name = "xenochat-tools"
+version = "0.1.0"
+description = "Auxiliary script dependencies for Xenochat"
+requires-python = ">=3.10"
+dependencies = [
+  "tomlkit>=0.13.2",
+  "requests>=2.32.3",
+  "pre-commit>=4.0.1",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"

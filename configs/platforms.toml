@@ -1,0 +1,68 @@
+# Platform adapter baseline
+[discord]
+enabled = true
+mode = "l3"
+
+[telegram]
+enabled = true
+mode = "l3"
+
+[slack]
+enabled = true
+mode = "l2"
+
+[teams]
+enabled = true
+mode = "l2"
+
+[googlechat]
+enabled = false
+mode = "l2"
+
+[imessage]
+enabled = false
+mode = "l1"
+
+[instagram]
+enabled = false
+mode = "l1"
+
+[kakaotalk]
+enabled = false
+mode = "l1"
+
+[line]
+enabled = false
+mode = "l2"
+
+[messenger]
+enabled = false
+mode = "l2"
+
+[qq]
+enabled = false
+mode = "l1"
+
+[signal]
+enabled = false
+mode = "l1"
+
+[skype]
+enabled = false
+mode = "l1"
+
+[viber]
+enabled = false
+mode = "l2"
+
+[wechat]
+enabled = false
+mode = "l1"
+
+[whatsapp]
+enabled = false
+mode = "l2"
+
+[zoom]
+enabled = false
+mode = "l1"

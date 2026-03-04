@@ -1,0 +1,17 @@
+[package]
+name = "xenochat-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "xenochat-cli"
+path = "src/main.rs"
+
+[dependencies]
+xenochat-common = { path = "../common" }
+xenochat-gpu = { path = "../gpu" }
+
+[lints]
+workspace = true
