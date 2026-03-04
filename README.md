@@ -31,6 +31,3 @@ Xenochat is a Rust-first multi-platform AI bot framework designed for high safet
 - Public bind requires non-empty `api_keys`
 - Queue model: bounded queue with optional drop policy
 - Logs: secret redaction helpers in `crates/common/src/security.rs`
-
-## License
-AGPL-3.0-only.
