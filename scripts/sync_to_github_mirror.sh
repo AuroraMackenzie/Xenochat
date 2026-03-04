@@ -9,6 +9,8 @@ rsync -a --delete \
   --exclude '.git' \
   --exclude 'target' \
   --exclude '.Xenochat' \
+  --exclude 'node_modules' \
+  --exclude 'frontend/dist' \
   --exclude '.DS_Store' \
   "$SOURCE_DIR/" "$MIRROR_DIR/"
 
