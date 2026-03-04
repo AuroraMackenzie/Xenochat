@@ -12,7 +12,7 @@ This checklist is the release gate for Xenochat runtime security.
 ## Secret Management
 - API keys in config must use encrypted format: `enc:v1:<nonce>:<ciphertext>`.
 - Plaintext API keys are rejected at startup.
-- `XENOCHAT_MASTER_KEY` is required to decrypt encrypted keys.
+- Master key must be resolvable from `XENOCHAT_MASTER_KEY` or macOS Keychain fallback.
 - Logs must pass redaction tests for token-like data.
 
 ## Build and Test Gate

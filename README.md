@@ -26,9 +26,10 @@ Xenochat is a Rust-first multi-platform AI bot framework designed for high safet
 5. `cargo run -p xenochat-cli -- check-config configs/xenochat.toml`
 6. `export XENOCHAT_MASTER_KEY='replace-with-strong-secret'`
 7. `cargo run -p xenochat-cli -- seal-key 'my-api-key'`
-8. `pnpm --dir frontend install`
-9. `pnpm --dir frontend dev`
-10. `scripts/security_audit.sh`
+8. `cargo run -p xenochat-cli -- master-key-check`
+9. `pnpm --dir frontend install`
+10. `pnpm --dir frontend dev`
+11. `scripts/security_audit.sh`
 
 ## Security baseline
 - API host default: `127.0.0.1`
@@ -39,6 +40,7 @@ Xenochat is a Rust-first multi-platform AI bot framework designed for high safet
 - Query-token auth is rejected (`token`/`access_token` in URL).
 - Protected routes require `Authorization: Bearer <token>`.
 - Encrypted API keys use `enc:v1:<nonce>:<ciphertext>` and are decrypted by `XENOCHAT_MASTER_KEY`.
+- If `XENOCHAT_MASTER_KEY` is missing on macOS, runtime can fall back to Keychain lookup (`xenochat.master-key` service by default).
 - Startup prints an explicit warning when API bind host is non-local.
 
 ## Security docs

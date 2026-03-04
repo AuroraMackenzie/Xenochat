@@ -10,6 +10,7 @@
 | B5 | Sync to GitHub working copy and commit staging | COMPLETED | 2026-03-04 |
 | B6 | Full reference read pass + secure API runtime uplift | COMPLETED | 2026-03-04 |
 | B7 | Security governance closure (threat model, audits, startup risk warning) | COMPLETED | 2026-03-04 |
+| B8 | macOS Keychain master-key fallback integration | COMPLETED | 2026-03-04 |
 
 ## Notes
 - The project was initialized from the blueprint and predecessor summary documents.
@@ -27,3 +28,5 @@
 - Added encrypted secret primitives with `enc:v1` format enforcement, startup rejection of plaintext API keys, and CLI helpers for sealing/opening keys with `XENOCHAT_MASTER_KEY`.
 - Added security governance deliverables: `docs/security/threat-model.md`, `docs/security/security-baseline.md`, `scripts/security_audit.sh`, `deny.toml`, and CI integration for `cargo-audit` / `cargo-deny` / `pnpm audit`.
 - Added explicit startup warning when API bind host is not local-only so public exposure risk is visible at launch time.
+- Added optional macOS Keychain master-key fallback (`security find-generic-password`) with environment-priority resolution in `xenochat-common::secrets`.
+- Wired Keychain-aware master key resolution into API bootstrap and CLI (`check-config`, `seal-key`, `open-key`, and `master-key-check`).

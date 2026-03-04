@@ -16,7 +16,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
-use xenochat_common::config::XenochatConfig;
+use xenochat_common::{config::XenochatConfig, secrets::resolve_master_key};
 
 use crate::{ApiService, Route};
 
@@ -97,7 +97,10 @@ struct PluginsResponse {
 }
 
 pub fn build_router(config: XenochatConfig) -> Result<Router, String> {
-    build_router_with_master(config, std::env::var("XENOCHAT_MASTER_KEY").ok())
+    let resolved = resolve_master_key().map_err(|error| {
+        format!("failed to resolve master key from environment/keychain: {error:?}")
+    })?;
+    build_router_with_master(config, resolved.map(|item| item.value))
 }
 
 pub fn build_router_with_master(

@@ -6,6 +6,7 @@ api.allowed_origins = "https://xenochat.local"
 # For non-local bind, create encrypted keys:
 #   export XENOCHAT_MASTER_KEY='your-master-passphrase'
 #   xenochat-cli seal-key 'your-api-key'
+# Or store a master key in macOS Keychain service xenochat.master-key.
 # Then place the returned value below.
 api.api_keys = ""
 
