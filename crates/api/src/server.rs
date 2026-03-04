@@ -26,18 +26,23 @@ const RATE_LIMIT_MAX: usize = 120;
 #[derive(Clone)]
 pub struct ApiRuntime {
     config: XenochatConfig,
+    resolved_api_keys: Arc<Vec<String>>,
     service: Arc<Mutex<ApiService>>,
     limiter: Arc<Mutex<HashMap<String, VecDeque<Instant>>>>,
 }
 
 impl ApiRuntime {
-    pub fn new(config: XenochatConfig) -> Self {
+    pub fn new(config: XenochatConfig, master_key: Option<&str>) -> Result<Self, String> {
+        let resolved_api_keys = config
+            .resolve_api_keys(master_key)
+            .map_err(|error| format!("failed to resolve encrypted api keys: {error:?}"))?;
         let service = ApiService::new(config.clone());
-        Self {
+        Ok(Self {
             config,
+            resolved_api_keys: Arc::new(resolved_api_keys),
             service: Arc::new(Mutex::new(service)),
             limiter: Arc::new(Mutex::new(HashMap::new())),
-        }
+        })
     }
 
     fn with_service_mut<T>(&self, f: impl FnOnce(&mut ApiService) -> T) -> T {
@@ -50,6 +55,10 @@ impl ApiRuntime {
 
     fn config(&self) -> &XenochatConfig {
         &self.config
+    }
+
+    fn resolved_api_keys(&self) -> &[String] {
+        self.resolved_api_keys.as_ref()
     }
 }
 
@@ -87,10 +96,17 @@ struct PluginsResponse {
     plugins: Vec<String>,
 }
 
-pub fn build_router(config: XenochatConfig) -> Router {
-    let state = ApiRuntime::new(config);
+pub fn build_router(config: XenochatConfig) -> Result<Router, String> {
+    build_router_with_master(config, std::env::var("XENOCHAT_MASTER_KEY").ok())
+}
 
-    Router::new()
+pub fn build_router_with_master(
+    config: XenochatConfig,
+    master_key: Option<String>,
+) -> Result<Router, String> {
+    let state = ApiRuntime::new(config, master_key.as_deref())?;
+
+    let router = Router::new()
         .route("/health", get(health))
         .route("/api/v1/chat", post(chat))
         .route("/api/v1/config", get(config_snapshot))
@@ -106,7 +122,9 @@ pub fn build_router(config: XenochatConfig) -> Router {
         ))
         .layer(middleware::from_fn_with_state(state.clone(), enforce_auth))
         .layer(middleware::from_fn_with_state(state.clone(), enforce_cors))
-        .with_state(state)
+        .with_state(state);
+
+    Ok(router)
 }
 
 pub async fn serve(config: XenochatConfig) -> Result<(), String> {
@@ -119,7 +137,7 @@ pub async fn serve(config: XenochatConfig) -> Result<(), String> {
         .await
         .map_err(|error| format!("failed to bind {bind}: {error}"))?;
 
-    let router = build_router(config);
+    let router = build_router(config)?;
     axum::serve(
         listener,
         router.into_make_service_with_connect_info::<SocketAddr>(),
@@ -253,7 +271,7 @@ async fn enforce_auth(
         return next.run(request).await;
     }
 
-    let keys = &state.config().api.api_keys;
+    let keys = state.resolved_api_keys();
     if keys.is_empty() {
         return next.run(request).await;
     }
@@ -360,18 +378,21 @@ mod tests {
     use tower::util::ServiceExt;
     use xenochat_common::config::XenochatConfig;
 
-    use crate::server::build_router;
+    use crate::server::build_router_with_master;
 
     fn secured_config() -> XenochatConfig {
+        let sealed =
+            xenochat_common::crypto::seal_secret("secret-key", "unit-test-master").expect("seal");
         let mut config = XenochatConfig::default();
-        config.api.api_keys = vec!["secret-key".to_owned()];
+        config.api.api_keys = vec![sealed];
         config.api.allowed_origins = vec!["https://console.xenochat.local".to_owned()];
         config
     }
 
     #[tokio::test]
     async fn rejects_query_token() {
-        let app = build_router(secured_config());
+        let app = build_router_with_master(secured_config(), Some("unit-test-master".to_owned()))
+            .expect("router");
 
         let response = app
             .oneshot(
@@ -390,7 +411,8 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_missing_bearer_on_protected_route() {
-        let app = build_router(secured_config());
+        let app = build_router_with_master(secured_config(), Some("unit-test-master".to_owned()))
+            .expect("router");
 
         let response = app
             .oneshot(
@@ -408,7 +430,8 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_unapproved_origin() {
-        let app = build_router(secured_config());
+        let app = build_router_with_master(secured_config(), Some("unit-test-master".to_owned()))
+            .expect("router");
 
         let response = app
             .oneshot(
@@ -428,7 +451,8 @@ mod tests {
 
     #[tokio::test]
     async fn accepts_valid_origin_and_bearer() {
-        let app = build_router(secured_config());
+        let app = build_router_with_master(secured_config(), Some("unit-test-master".to_owned()))
+            .expect("router");
 
         let response = app
             .oneshot(
@@ -448,7 +472,8 @@ mod tests {
 
     #[tokio::test]
     async fn health_is_public() {
-        let app = build_router(secured_config());
+        let app = build_router_with_master(secured_config(), Some("unit-test-master".to_owned()))
+            .expect("router");
 
         let response = app
             .oneshot(

@@ -62,6 +62,12 @@ async fn main() {
         eprintln!("configuration validation failed: {error:?}");
         std::process::exit(1);
     }
+    if !is_local_host(&config.api.host) {
+        eprintln!(
+            "security warning: api.host={} is not local-only. Verify firewall, CORS allowlist, and bearer key policy before exposing this endpoint.",
+            config.api.host
+        );
+    }
 
     let command = std::env::args()
         .nth(1)
@@ -69,7 +75,10 @@ async fn main() {
 
     match command.as_str() {
         "serve" => {
-            let _router = build_router(config.clone());
+            if let Err(error) = build_router(config.clone()) {
+                eprintln!("api router bootstrap failed: {error}");
+                std::process::exit(1);
+            }
             println!(
                 "starting xenochat api at {}:{}",
                 config.api.host, config.api.port
@@ -161,4 +170,8 @@ fn run_preview(config: XenochatConfig) {
     println!("trigger status: {trigger_status}");
     println!("gpu backend: {:?}", probe.backend);
     println!("gpu details: {}", probe.details);
+}
+
+fn is_local_host(host: &str) -> bool {
+    matches!(host, "127.0.0.1" | "::1" | "localhost")
 }

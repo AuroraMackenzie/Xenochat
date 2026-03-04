@@ -20,17 +20,30 @@ Xenochat is a Rust-first multi-platform AI bot framework designed for high safet
 
 ## Quick start
 1. `cargo check --workspace`
-2. `cargo run -p xenochat-bin`
-3. `cargo run -p xenochat-cli -- gpu-info`
-4. `pnpm --dir frontend install`
-5. `pnpm --dir frontend dev`
+2. `cargo run -p xenochat-bin -- preview`
+3. `cargo run -p xenochat-bin -- serve`
+4. `cargo run -p xenochat-cli -- gpu-info`
+5. `cargo run -p xenochat-cli -- check-config configs/xenochat.toml`
+6. `export XENOCHAT_MASTER_KEY='replace-with-strong-secret'`
+7. `cargo run -p xenochat-cli -- seal-key 'my-api-key'`
+8. `pnpm --dir frontend install`
+9. `pnpm --dir frontend dev`
+10. `scripts/security_audit.sh`
 
 ## Security baseline
 - API host default: `127.0.0.1`
 - CORS default: deny all origins
-- Public bind requires non-empty `api_keys`
+- Public bind requires non-empty encrypted `api_keys`
 - Queue model: bounded queue with optional drop policy
 - Logs: secret redaction helpers in `crates/common/src/security.rs`
+- Query-token auth is rejected (`token`/`access_token` in URL).
+- Protected routes require `Authorization: Bearer <token>`.
+- Encrypted API keys use `enc:v1:<nonce>:<ciphertext>` and are decrypted by `XENOCHAT_MASTER_KEY`.
+- Startup prints an explicit warning when API bind host is non-local.
+
+## Security docs
+- Threat model: `docs/security/threat-model.md`
+- Release gate checklist: `docs/security/security-baseline.md`
 
 ## License
 AGPL-3.0-only.

@@ -9,6 +9,7 @@
 | B4 | Quality gates (CI, lint rules, anti-npm checks) | COMPLETED | 2026-03-04 |
 | B5 | Sync to GitHub working copy and commit staging | COMPLETED | 2026-03-04 |
 | B6 | Full reference read pass + secure API runtime uplift | COMPLETED | 2026-03-04 |
+| B7 | Security governance closure (threat model, audits, startup risk warning) | COMPLETED | 2026-03-04 |
 
 ## Notes
 - The project was initialized from the blueprint and predecessor summary documents.
@@ -23,3 +24,6 @@
 - Completed a full read pass for reference repositories under `AI-Programs/MaiMai` by file-level content scanning (1613 files) and critical source extraction.
 - Removed blueprint/summary files from the mirror repository and updated sync rules to keep those local-only.
 - Upgraded `xenochat-api` from contract-only state to a runnable Axum runtime with strict CORS allowlist enforcement, bearer-only protected routes, query-token rejection, and in-memory rate limiting.
+- Added encrypted secret primitives with `enc:v1` format enforcement, startup rejection of plaintext API keys, and CLI helpers for sealing/opening keys with `XENOCHAT_MASTER_KEY`.
+- Added security governance deliverables: `docs/security/threat-model.md`, `docs/security/security-baseline.md`, `scripts/security_audit.sh`, `deny.toml`, and CI integration for `cargo-audit` / `cargo-deny` / `pnpm audit`.
+- Added explicit startup warning when API bind host is not local-only so public exposure risk is visible at launch time.

@@ -17,6 +17,9 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      - name: Install Rust security tooling
+        run: cargo install --locked cargo-audit cargo-deny
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -53,6 +56,9 @@ jobs:
 
       - name: Frontend build
         run: pnpm --dir frontend build
+
+      - name: Security audits
+        run: scripts/security_audit.sh
 
       - name: Originality hash audit
         run: scripts/originality_audit.py

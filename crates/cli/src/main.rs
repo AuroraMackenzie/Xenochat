@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use xenochat_common::config::XenochatConfig;
+use xenochat_common::crypto::{open_secret, seal_secret};
 use xenochat_gpu::{GpuProbe, benchmark_hint};
 
 fn main() {
@@ -22,6 +23,20 @@ fn main() {
             println!("details={}", probe.details);
             println!("{}", benchmark_hint(64));
         }
+        Some("seal-key") => {
+            let Some(plaintext) = args.next() else {
+                eprintln!("usage: xenochat-cli seal-key <plaintext>");
+                std::process::exit(2);
+            };
+            seal_key(&plaintext);
+        }
+        Some("open-key") => {
+            let Some(sealed) = args.next() else {
+                eprintln!("usage: xenochat-cli open-key <enc-value>");
+                std::process::exit(2);
+            };
+            open_key(&sealed);
+        }
         Some(other) => {
             eprintln!("unknown command: {other}");
             print_help_and_exit();
@@ -36,6 +51,13 @@ fn run_check_config(path: PathBuf) {
     match XenochatConfig::from_toml_file(&path) {
         Ok(config) => match config.validate() {
             Ok(()) => {
+                if config.has_encrypted_api_keys() {
+                    let master = std::env::var("XENOCHAT_MASTER_KEY").ok();
+                    if let Err(error) = config.resolve_api_keys(master.as_deref()) {
+                        eprintln!("configuration secret resolution failed: {error:?}");
+                        std::process::exit(1);
+                    }
+                }
                 println!("configuration is valid");
             }
             Err(error) => {
@@ -54,5 +76,41 @@ fn print_help_and_exit() -> ! {
     eprintln!("xenochat-cli commands:");
     eprintln!("  check-config <path>");
     eprintln!("  gpu-info");
+    eprintln!("  seal-key <plaintext>");
+    eprintln!("  open-key <enc-value>");
     std::process::exit(2);
+}
+
+fn seal_key(plaintext: &str) {
+    let master = require_master_key();
+    match seal_secret(plaintext, &master) {
+        Ok(encoded) => println!("{encoded}"),
+        Err(error) => {
+            eprintln!("failed to encrypt secret: {error:?}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn open_key(encoded: &str) {
+    let master = require_master_key();
+    match open_secret(encoded, &master) {
+        Ok(plaintext) => println!("{plaintext}"),
+        Err(error) => {
+            eprintln!("failed to decrypt secret: {error:?}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn require_master_key() -> String {
+    match std::env::var("XENOCHAT_MASTER_KEY") {
+        Ok(value) if !value.trim().is_empty() => value,
+        _ => {
+            eprintln!(
+                "missing XENOCHAT_MASTER_KEY environment variable; set it before sealing/opening keys"
+            );
+            std::process::exit(2);
+        }
+    }
 }

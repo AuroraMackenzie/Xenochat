@@ -1,5 +1,7 @@
 use std::path::Path;
 
+use crate::crypto::{SecretCodecError, is_encrypted_secret, open_secret};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ApiSettings {
     pub host: String,
@@ -61,6 +63,13 @@ pub enum ConfigValidationError {
     PublicBindingWithoutAuth,
     WildcardCors,
     ZeroQueueCapacity,
+    PlaintextApiKeyDetected,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConfigSecretError {
+    MissingMasterKey,
+    DecryptFailure(SecretCodecError),
 }
 
 impl XenochatConfig {
@@ -78,7 +87,49 @@ impl XenochatConfig {
             return Err(ConfigValidationError::WildcardCors);
         }
 
+        if self
+            .api
+            .api_keys
+            .iter()
+            .any(|entry| !entry.is_empty() && !is_encrypted_secret(entry))
+        {
+            return Err(ConfigValidationError::PlaintextApiKeyDetected);
+        }
+
         Ok(())
+    }
+
+    pub fn has_encrypted_api_keys(&self) -> bool {
+        self.api
+            .api_keys
+            .iter()
+            .any(|entry| !entry.is_empty() && is_encrypted_secret(entry))
+    }
+
+    pub fn resolve_api_keys(
+        &self,
+        master_key: Option<&str>,
+    ) -> Result<Vec<String>, ConfigSecretError> {
+        let mut resolved = Vec::new();
+
+        for key in &self.api.api_keys {
+            if key.is_empty() {
+                continue;
+            }
+
+            if is_encrypted_secret(key) {
+                let Some(master) = master_key else {
+                    return Err(ConfigSecretError::MissingMasterKey);
+                };
+
+                let opened = open_secret(key, master).map_err(ConfigSecretError::DecryptFailure)?;
+                resolved.push(opened);
+            } else {
+                resolved.push(key.clone());
+            }
+        }
+
+        Ok(resolved)
     }
 
     pub fn from_toml_file(path: &Path) -> Result<Self, String> {
@@ -155,7 +206,9 @@ fn parse_csv_value(value: &str) -> Vec<String> {
 mod tests {
     use std::io::Write;
 
-    use super::{ConfigValidationError, XenochatConfig};
+    use crate::crypto::seal_secret;
+
+    use super::{ConfigSecretError, ConfigValidationError, XenochatConfig};
 
     #[test]
     fn rejects_public_host_without_keys() {
@@ -174,11 +227,19 @@ mod tests {
     }
 
     #[test]
+    fn rejects_plaintext_api_keys() {
+        let mut config = XenochatConfig::default();
+        config.api.api_keys = vec!["plain-key".to_owned()];
+        let result = config.validate();
+        assert_eq!(result, Err(ConfigValidationError::PlaintextApiKeyDetected));
+    }
+
+    #[test]
     fn loads_api_lists_from_toml() {
         let mut tempfile = tempfile::NamedTempFile::new().expect("temp file");
         writeln!(
             tempfile,
-            "api.allowed_origins = https://console.local,https://admin.local\napi.api_keys = key1,key2"
+            "api.allowed_origins = https://console.local,https://admin.local\napi.api_keys = enc:v1:test,enc:v1:test2"
         )
         .expect("write");
 
@@ -186,5 +247,25 @@ mod tests {
 
         assert_eq!(config.api.allowed_origins.len(), 2);
         assert_eq!(config.api.api_keys.len(), 2);
+    }
+
+    #[test]
+    fn resolves_encrypted_api_keys() {
+        let sealed = seal_secret("real-key", "master-secret").expect("seal");
+        let mut config = XenochatConfig::default();
+        config.api.api_keys = vec![sealed];
+        let resolved = config
+            .resolve_api_keys(Some("master-secret"))
+            .expect("resolve keys");
+        assert_eq!(resolved, vec!["real-key".to_owned()]);
+    }
+
+    #[test]
+    fn requires_master_key_for_encrypted_entries() {
+        let sealed = seal_secret("real-key", "master-secret").expect("seal");
+        let mut config = XenochatConfig::default();
+        config.api.api_keys = vec![sealed];
+        let result = config.resolve_api_keys(None);
+        assert_eq!(result, Err(ConfigSecretError::MissingMasterKey));
     }
 }
