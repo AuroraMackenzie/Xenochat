@@ -12,6 +12,7 @@
 | B7 | Security governance closure (threat model, audits, startup risk warning) | COMPLETED | 2026-03-04 |
 | B8 | macOS Keychain master-key fallback integration | COMPLETED | 2026-03-04 |
 | B9 | RBAC baseline (admin route gate + dashboard access tier update) | COMPLETED | 2026-03-04 |
+| B10 | Zero-warning stabilization (pnpm build-script policy + CI parity validation) | COMPLETED | 2026-03-04 |
 
 ## Notes
 - The project was initialized from the blueprint and predecessor summary documents.
@@ -34,3 +35,5 @@
 - Added split operator/admin encrypted key configuration (`api.api_keys`, `api.admin_api_keys`) with strict plaintext rejection and decryption checks in config validation and CLI.
 - Added admin-only API route family (`/api/v1/admin/*`) with dedicated bearer enforcement and regression tests for non-admin/admin access behavior.
 - Updated dashboard UI with explicit Access Tiers panel and refreshed docs to reflect RBAC route-level policy.
+- Eliminated pnpm install warnings by moving `onlyBuiltDependencies` policy to workspace root (`pnpm-workspace.yaml`) and verifying `esbuild` postinstall is explicitly approved.
+- Re-ran full quality and security gates after cleanup to confirm zero errors and zero warnings across Rust, frontend, policy scripts, and vulnerability scans.
